@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using UnityEngine.EventSystems;
 
 public class Inventory : MonoBehaviour
 {
@@ -17,6 +18,13 @@ public class Inventory : MonoBehaviour
         public WeaponData weapon;
         public AmmoData ammo;
         public int ammoAmount;
+        public int itemId;
+    }
+
+    private sealed class AmmoPackage
+    {
+        public int id;
+        public int amount;
     }
 
     public int maxWeapons = 6;
@@ -24,7 +32,7 @@ public class Inventory : MonoBehaviour
 
     public List<WeaponData> ownedWeapons = new List<WeaponData>();
 
-    private Dictionary<AmmoData, List<int>> ammoStorage = new Dictionary<AmmoData, List<int>>();
+    private Dictionary<AmmoData, List<AmmoPackage>> ammoStorage = new Dictionary<AmmoData, List<AmmoPackage>>();
 
     public WeaponData[] quickSlots = new WeaponData[4];
     public AmmoData[] holdingAmmo = new AmmoData[4];
@@ -35,6 +43,7 @@ public class Inventory : MonoBehaviour
     public GameObject inventoryContentUI;
     public GameObject rowPrefabUI;
     public GameObject slotPrefabUI;
+    public GameObject[] quickSlotDropZones = new GameObject[4];
 
     public int rows = 2;
     public int columns = 6;
@@ -43,11 +52,17 @@ public class Inventory : MonoBehaviour
     public Color slotNormalColor = Color.white;
     public Color slotSelectedColor = new Color(0.85f, 0.85f, 0.85f, 1f);
     public KeyCode sortInventoryKey = KeyCode.Tab;
+    public bool dragDropDebugLogs;
 
     private Shop shop;
     private GameManager gameManager;
     private readonly List<InventoryItem> inventoryItems = new List<InventoryItem>();
+    private readonly List<int> manualInventoryOrderIds = new List<int>();
     private int selectedIndex;
+    private bool keepInventorySorted;
+    private int draggedInventoryIndex = -1;
+    private int nextAmmoPackageId = 1;
+    private bool dropHandledThisDrag;
 
     private void Start()
     {
@@ -59,6 +74,10 @@ public class Inventory : MonoBehaviour
         {
             AddAmmo(ammoT, 60);
         }
+
+        ValidateDragDropSetup();
+        ConfigureQuickSlotDropZones();
+        RefreshQuickSlotVisuals();
     }
 
     private void Update()
@@ -88,6 +107,8 @@ public class Inventory : MonoBehaviour
 
         if (shouldOpen)
         {
+            ValidateDragDropSetup();
+            ConfigureQuickSlotDropZones();
             BuildInventoryItems();
             EnsureSelectedIndexInBounds();
             InstantiateInventory();
@@ -144,6 +165,7 @@ public class Inventory : MonoBehaviour
             return;
 
         quickSlots[quickSlotIndex] = selectedItem.weapon;
+        RefreshQuickSlotVisuals();
         InstantiateInventory();
     }
 
@@ -161,14 +183,14 @@ public class Inventory : MonoBehaviour
             return;
 
         if (!hasTypeAlready)
-            ammoStorage[type] = new List<int>();
+            ammoStorage[type] = new List<AmmoPackage>();
 
         int remaining = amount;
         for (int i = 0; i < ammoStorage[type].Count; i++)
         {
-            int space = type.maxCarry - ammoStorage[type][i];
+            int space = type.maxCarry - ammoStorage[type][i].amount;
             int toAdd = Mathf.Min(space, remaining);
-            ammoStorage[type][i] += toAdd;
+            ammoStorage[type][i].amount += toAdd;
             remaining -= toAdd;
 
             if (remaining <= 0) break;
@@ -177,7 +199,11 @@ public class Inventory : MonoBehaviour
         while (remaining > 0 && HasFreeInventorySlot())
         {
             int packageAmount = Mathf.Min(type.maxCarry, remaining);
-            ammoStorage[type].Add(packageAmount);
+            ammoStorage[type].Add(new AmmoPackage
+            {
+                id = nextAmmoPackageId++,
+                amount = packageAmount
+            });
             remaining -= packageAmount;
         }
 
@@ -192,20 +218,20 @@ public class Inventory : MonoBehaviour
         int remaining = amount;
         for (int i = 0; i < ammoStorage[type].Count; i++)
         {
-            if (ammoStorage[type][i] >= remaining)
+            if (ammoStorage[type][i].amount >= remaining)
             {
-                ammoStorage[type][i] -= remaining;
+                ammoStorage[type][i].amount -= remaining;
                 remaining = 0;
                 break;
             }
             else
             {
-                remaining -= ammoStorage[type][i];
-                ammoStorage[type][i] = 0;
+                remaining -= ammoStorage[type][i].amount;
+                ammoStorage[type][i].amount = 0;
             }
         }
 
-        ammoStorage[type].RemoveAll(x => x <= 0);
+        ammoStorage[type].RemoveAll(x => x == null || x.amount <= 0);
         if (ammoStorage[type].Count == 0)
             ammoStorage.Remove(type);
 
@@ -218,8 +244,11 @@ public class Inventory : MonoBehaviour
             return 0;
 
         int total = 0;
-        foreach (int pack in ammoStorage[type])
-            total += pack;
+        foreach (AmmoPackage pack in ammoStorage[type])
+        {
+            if (pack != null && pack.amount > 0)
+                total += pack.amount;
+        }
 
         return total;
     }
@@ -231,7 +260,19 @@ public class Inventory : MonoBehaviour
     private void InstantiateInventory(bool rebuildItems = true)
     {
         if (rebuildItems)
+        {
+            if (keepInventorySorted)
+                NormalizeAmmoPackagesForAllTypes();
+
             BuildInventoryItems();
+
+            if (keepInventorySorted)
+                SortInventoryForDisplay();
+
+            ApplyManualInventoryOrderIfNeeded();
+        }
+
+        EnsureInventoryListHasSlotPlaceholders();
 
         EnsureSelectedIndexInBounds();
         ClearInventoryWindow();
@@ -267,15 +308,34 @@ public class Inventory : MonoBehaviour
                 }
 
                 InventoryItem item = inventoryItems[index];
+                if (item == null)
+                {
+                    itemImage.sprite = null;
+                    itemName.text = "";
+                    itemDecor.text = "";
+                    itemImage.gameObject.SetActive(false);
+                    itemName.gameObject.SetActive(false);
+                    itemDecor.gameObject.SetActive(false);
+                    itemDecorBg.gameObject.SetActive(false);
+
+                    InventorySlotDropHandler emptySlotDropHandler = newSlot.GetComponent<InventorySlotDropHandler>();
+                    if (emptySlotDropHandler == null)
+                        emptySlotDropHandler = newSlot.AddComponent<InventorySlotDropHandler>();
+
+                    emptySlotDropHandler.Configure(this, index);
+                    continue;
+                }
 
                 if (item.type == InventoryItemType.Weapon && item.weapon != null)
                 {
                     WeaponData weapon = item.weapon;
                     itemName.text = weapon.weaponName;
                     itemImage.sprite = weapon.SpriteUI;
-                    itemDecor.text = "";
-                    itemDecor.gameObject.SetActive(false);
-                    itemDecorBg.gameObject.SetActive(false);
+                    string quickSlotLabel = GetQuickSlotLabel(weapon);
+                    itemDecor.text = quickSlotLabel;
+                    bool hasLabel = !string.IsNullOrEmpty(quickSlotLabel);
+                    itemDecor.gameObject.SetActive(hasLabel);
+                    itemDecorBg.gameObject.SetActive(hasLabel);
                 }
                 else if (item.type == InventoryItemType.Ammo && item.ammo != null)
                 {
@@ -296,6 +356,12 @@ public class Inventory : MonoBehaviour
 
                 itemName.gameObject.SetActive(true);
                 itemImage.gameObject.SetActive(true);
+
+                InventorySlotDropHandler slotDropHandler = newSlot.GetComponent<InventorySlotDropHandler>();
+                if (slotDropHandler == null)
+                    slotDropHandler = newSlot.AddComponent<InventorySlotDropHandler>();
+
+                slotDropHandler.Configure(this, index);
                 
             }
         }
@@ -323,47 +389,51 @@ public class Inventory : MonoBehaviour
             });
         }
 
-        foreach (KeyValuePair<AmmoData, List<int>> entry in ammoStorage)
+        foreach (KeyValuePair<AmmoData, List<AmmoPackage>> entry in ammoStorage)
         {
             if (entry.Key == null)
                 continue;
 
             for (int i = 0; i < entry.Value.Count; i++)
             {
-                int packageAmount = entry.Value[i];
-                if (packageAmount <= 0)
+                AmmoPackage package = entry.Value[i];
+                if (package == null || package.amount <= 0)
                     continue;
 
                 inventoryItems.Add(new InventoryItem
                 {
                     type = InventoryItemType.Ammo,
                     ammo = entry.Key,
-                    ammoAmount = packageAmount
+                    ammoAmount = package.amount,
+                    itemId = package.id
                 });
             }
+        }
+
+        for (int i = 0; i < inventoryItems.Count; i++)
+        {
+            if (inventoryItems[i].type == InventoryItemType.Weapon && inventoryItems[i].weapon != null)
+                inventoryItems[i].itemId = GetWeaponItemId(inventoryItems[i].weapon);
         }
     }
 
     private void SortAndRefreshInventory()
     {
-        NormalizeAmmoPackagesForAllTypes();
-        BuildInventoryItems();
-        SortInventoryForDisplay();
-        EnsureSelectedIndexInBounds();
-        InstantiateInventory(false);
+        keepInventorySorted = true;
+        InstantiateInventory();
     }
 
     private void NormalizeAmmoPackagesForAllTypes()
     {
         List<AmmoData> typesToRemove = new List<AmmoData>();
 
-        foreach (KeyValuePair<AmmoData, List<int>> entry in ammoStorage)
+        foreach (KeyValuePair<AmmoData, List<AmmoPackage>> entry in ammoStorage)
         {
             AmmoData ammoType = entry.Key;
             if (ammoType == null)
                 continue;
 
-            List<int> packages = entry.Value;
+            List<AmmoPackage> packages = entry.Value;
             if (packages == null)
             {
                 typesToRemove.Add(ammoType);
@@ -373,8 +443,8 @@ public class Inventory : MonoBehaviour
             int totalAmmo = 0;
             for (int i = 0; i < packages.Count; i++)
             {
-                if (packages[i] > 0)
-                    totalAmmo += packages[i];
+                if (packages[i] != null && packages[i].amount > 0)
+                    totalAmmo += packages[i].amount;
             }
 
             if (totalAmmo <= 0)
@@ -389,14 +459,16 @@ public class Inventory : MonoBehaviour
             int leftover = totalAmmo % ammoType.maxCarry;
 
             for (int i = 0; i < fullPackages; i++)
-                packages.Add(ammoType.maxCarry);
+                packages.Add(new AmmoPackage { id = nextAmmoPackageId++, amount = ammoType.maxCarry });
 
             if (leftover > 0)
-                packages.Add(leftover);
+                packages.Add(new AmmoPackage { id = nextAmmoPackageId++, amount = leftover });
         }
 
         for (int i = 0; i < typesToRemove.Count; i++)
             ammoStorage.Remove(typesToRemove[i]);
+
+        SaveManualOrderFromCurrentItems();
     }
 
     public void SortInventoryForDisplay()
@@ -456,6 +528,435 @@ public class Inventory : MonoBehaviour
         return GetUsedSlotCount() < GetSlotCount();
     }
 
+    private int GetWeaponItemId(WeaponData weapon)
+    {
+        return weapon != null ? weapon.GetInstanceID() : 0;
+    }
+
+    private void ApplyManualInventoryOrderIfNeeded()
+    {
+        if (keepInventorySorted)
+        {
+            SaveManualOrderFromCurrentItems();
+            return;
+        }
+
+        int slotCount = GetSlotCount();
+        if (manualInventoryOrderIds.Count == 0)
+        {
+            EnsureInventoryListHasSlotPlaceholders();
+            SaveManualOrderFromCurrentItems();
+            return;
+        }
+
+        Dictionary<int, InventoryItem> itemsById = new Dictionary<int, InventoryItem>();
+        List<InventoryItem> unordered = new List<InventoryItem>();
+
+        for (int i = 0; i < inventoryItems.Count; i++)
+        {
+            InventoryItem item = inventoryItems[i];
+            if (item == null || item.itemId == 0 || itemsById.ContainsKey(item.itemId))
+            {
+                unordered.Add(item);
+                continue;
+            }
+
+            itemsById[item.itemId] = item;
+        }
+
+        List<InventoryItem> ordered = new List<InventoryItem>(slotCount);
+
+        for (int i = 0; i < slotCount; i++)
+        {
+            int id = i < manualInventoryOrderIds.Count ? manualInventoryOrderIds[i] : 0;
+            if (itemsById.TryGetValue(id, out InventoryItem matched))
+            {
+                ordered.Add(matched);
+                itemsById.Remove(id);
+            }
+            else
+            {
+                ordered.Add(null);
+            }
+        }
+
+        foreach (KeyValuePair<int, InventoryItem> pair in itemsById)
+            unordered.Add(pair.Value);
+
+        for (int i = 0; i < unordered.Count; i++)
+        {
+            int freeIndex = ordered.FindIndex(x => x == null);
+            if (freeIndex >= 0)
+                ordered[freeIndex] = unordered[i];
+        }
+
+        while (ordered.Count < slotCount)
+            ordered.Add(null);
+
+        if (ordered.Count > slotCount)
+            ordered.RemoveRange(slotCount, ordered.Count - slotCount);
+
+        inventoryItems.Clear();
+        inventoryItems.AddRange(ordered);
+        SaveManualOrderFromCurrentItems();
+    }
+
+    private void SaveManualOrderFromCurrentItems()
+    {
+        manualInventoryOrderIds.Clear();
+
+        if (keepInventorySorted)
+        {
+            for (int i = 0; i < inventoryItems.Count; i++)
+            {
+                if (inventoryItems[i] != null && inventoryItems[i].itemId != 0)
+                    manualInventoryOrderIds.Add(inventoryItems[i].itemId);
+            }
+
+            return;
+        }
+
+        int slotCount = GetSlotCount();
+        EnsureInventoryListHasSlotPlaceholders();
+        for (int i = 0; i < slotCount; i++)
+        {
+            InventoryItem item = i < inventoryItems.Count ? inventoryItems[i] : null;
+            manualInventoryOrderIds.Add(item != null ? item.itemId : 0);
+        }
+    }
+
+    private void EnsureInventoryListHasSlotPlaceholders()
+    {
+        int slotCount = GetSlotCount();
+        while (inventoryItems.Count < slotCount)
+            inventoryItems.Add(null);
+
+        if (inventoryItems.Count > slotCount)
+            inventoryItems.RemoveRange(slotCount, inventoryItems.Count - slotCount);
+    }
+
+    private void ConfigureQuickSlotDropZones()
+    {
+        int count = Mathf.Min(quickSlots.Length, quickSlotDropZones.Length);
+        for (int i = 0; i < count; i++)
+        {
+            GameObject zone = quickSlotDropZones[i];
+            if (zone == null)
+                continue;
+
+            InventoryQuickSlotDropHandler dropHandler = zone.GetComponent<InventoryQuickSlotDropHandler>();
+            if (dropHandler == null)
+                dropHandler = zone.AddComponent<InventoryQuickSlotDropHandler>();
+
+            dropHandler.Configure(this, i);
+        }
+    }
+
+    private void RefreshQuickSlotVisuals()
+    {
+        int count = quickSlots.Length;
+        for (int i = 0; i < count; i++)
+        {
+            GameObject slotUI = i < quickSlotDropZones.Length ? quickSlotDropZones[i] : null;
+            if (slotUI == null && i < quickSlotDropZones.Length)
+                slotUI = quickSlotDropZones[i];
+
+            if (slotUI == null)
+                continue;
+
+            Transform imageTransform = slotUI.transform.Find("image");
+            Transform nameTransform = slotUI.transform.Find("name");
+            Transform decorationTransform = slotUI.transform.Find("decoration");
+            Transform decorationBgTransform = slotUI.transform.Find("decorationBg");
+
+            Image itemImage = imageTransform != null ? imageTransform.GetComponent<Image>() : null;
+            TMP_Text itemName = nameTransform != null ? nameTransform.GetComponent<TMP_Text>() : null;
+            TMP_Text itemDecor = decorationTransform != null ? decorationTransform.GetComponent<TMP_Text>() : null;
+            Image itemDecorBg = decorationBgTransform != null ? decorationBgTransform.GetComponent<Image>() : null;
+
+            WeaponData weapon = quickSlots[i];
+            bool hasWeapon = weapon != null;
+
+            if (itemImage != null)
+            {
+                itemImage.sprite = hasWeapon ? weapon.SpriteUI : null;
+                itemImage.gameObject.SetActive(hasWeapon);
+            }
+
+            if (itemName != null)
+            {
+                itemName.text = hasWeapon ? weapon.weaponName : "";
+                itemName.gameObject.SetActive(hasWeapon);
+            }
+
+            if (itemDecor != null)
+            {
+                itemDecor.text = hasWeapon ? (i + 1).ToString() : "";
+                itemDecor.gameObject.SetActive(hasWeapon);
+            }
+
+            if (itemDecorBg != null)
+                itemDecorBg.gameObject.SetActive(hasWeapon);
+        }
+    }
+
+    public void BeginDragFromInventorySlot(int slotIndex)
+    {
+        if (!InventoryUI.activeSelf)
+            return;
+
+        if (slotIndex < 0 || slotIndex >= inventoryItems.Count)
+            return;
+
+        if (inventoryItems[slotIndex] == null)
+            return;
+
+        draggedInventoryIndex = slotIndex;
+        dropHandledThisDrag = false;
+
+        if (dragDropDebugLogs)
+            Debug.Log($"[Inventory] Begin drag from slot {slotIndex}");
+    }
+
+    public void EndDragFromInventorySlot()
+    {
+        if (dragDropDebugLogs && draggedInventoryIndex >= 0)
+            Debug.Log($"[Inventory] End drag from slot {draggedInventoryIndex}");
+
+        draggedInventoryIndex = -1;
+    }
+
+    public void ResolveDropFromPointer(PointerEventData eventData)
+    {
+        if (eventData == null)
+            return;
+
+        if (dropHandledThisDrag)
+            return;
+
+        if (draggedInventoryIndex < 0 || draggedInventoryIndex >= inventoryItems.Count)
+            return;
+
+        GameObject targetObject = eventData.pointerCurrentRaycast.gameObject;
+        if (targetObject != null)
+        {
+            InventorySlotDropHandler directSlotTarget = targetObject.GetComponentInParent<InventorySlotDropHandler>();
+            if (directSlotTarget != null)
+            {
+                DropDraggedItemOnInventorySlot(directSlotTarget.SlotIndex);
+                return;
+            }
+
+            InventoryQuickSlotDropHandler directQuickSlotTarget = targetObject.GetComponentInParent<InventoryQuickSlotDropHandler>();
+            if (directQuickSlotTarget != null)
+            {
+                DropDraggedItemOnQuickSlot(directQuickSlotTarget.QuickSlotIndex);
+                return;
+            }
+        }
+
+        EventSystem currentEventSystem = EventSystem.current;
+        if (currentEventSystem != null)
+        {
+            PointerEventData pointer = new PointerEventData(currentEventSystem)
+            {
+                position = eventData.position
+            };
+
+            List<RaycastResult> results = new List<RaycastResult>();
+            currentEventSystem.RaycastAll(pointer, results);
+
+            for (int i = 0; i < results.Count; i++)
+            {
+                GameObject hit = results[i].gameObject;
+                if (hit == null)
+                    continue;
+
+                InventorySlotDropHandler slotTarget = hit.GetComponentInParent<InventorySlotDropHandler>();
+                if (slotTarget != null)
+                {
+                    DropDraggedItemOnInventorySlot(slotTarget.SlotIndex);
+                    return;
+                }
+
+                InventoryQuickSlotDropHandler quickSlotTarget = hit.GetComponentInParent<InventoryQuickSlotDropHandler>();
+                if (quickSlotTarget != null)
+                {
+                    DropDraggedItemOnQuickSlot(quickSlotTarget.QuickSlotIndex);
+                    return;
+                }
+            }
+        }
+
+        if (TryGetInventorySlotIndexFromPointer(eventData.position, out int fallbackInventorySlotIndex))
+        {
+            DropDraggedItemOnInventorySlot(fallbackInventorySlotIndex);
+            return;
+        }
+
+        if (TryGetQuickSlotIndexFromPointer(eventData.position, out int fallbackQuickSlotIndex))
+        {
+            DropDraggedItemOnQuickSlot(fallbackQuickSlotIndex);
+            return;
+        }
+
+        if (targetObject == null)
+        {
+            if (dragDropDebugLogs)
+                Debug.Log("[Inventory] Drag ended with no UI target under pointer.");
+            return;
+        }
+
+        if (dragDropDebugLogs)
+            Debug.Log($"[Inventory] Drag ended over unsupported UI target: {targetObject.name}");
+    }
+
+    private bool TryGetInventorySlotIndexFromPointer(Vector2 screenPosition, out int slotIndex)
+    {
+        slotIndex = -1;
+        if (inventoryContentUI == null)
+            return false;
+
+        Canvas canvas = inventoryContentUI.GetComponentInParent<Canvas>();
+        Camera eventCamera = (canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay) ? canvas.worldCamera : null;
+
+        int currentIndex = 0;
+        for (int row = 0; row < inventoryContentUI.transform.childCount; row++)
+        {
+            Transform rowTransform = inventoryContentUI.transform.GetChild(row);
+            for (int col = 0; col < rowTransform.childCount; col++)
+            {
+                Transform slotTransform = rowTransform.GetChild(col);
+                RectTransform slotRect = slotTransform as RectTransform;
+                if (slotRect != null && RectTransformUtility.RectangleContainsScreenPoint(slotRect, screenPosition, eventCamera))
+                {
+                    slotIndex = currentIndex;
+                    return true;
+                }
+
+                currentIndex++;
+            }
+        }
+
+        return false;
+    }
+
+    private bool TryGetQuickSlotIndexFromPointer(Vector2 screenPosition, out int quickSlotIndex)
+    {
+        quickSlotIndex = -1;
+        int count = Mathf.Min(quickSlots.Length, quickSlotDropZones.Length);
+
+        Canvas canvas = GetComponentInParent<Canvas>();
+        Camera eventCamera = (canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay) ? canvas.worldCamera : null;
+
+        for (int i = 0; i < count; i++)
+        {
+            GameObject zone = quickSlotDropZones[i];
+            if (zone == null)
+                continue;
+
+            RectTransform zoneRect = zone.transform as RectTransform;
+            if (zoneRect != null && RectTransformUtility.RectangleContainsScreenPoint(zoneRect, screenPosition, eventCamera))
+            {
+                quickSlotIndex = i;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public void DropDraggedItemOnInventorySlot(int targetSlotIndex)
+    {
+        int slotCount = GetSlotCount();
+
+        if (draggedInventoryIndex < 0 || draggedInventoryIndex >= inventoryItems.Count)
+        {
+            if (dragDropDebugLogs)
+                Debug.Log("[Inventory] Drop ignored: no active dragged slot index");
+            return;
+        }
+
+        if (targetSlotIndex < 0 || targetSlotIndex >= slotCount)
+            return;
+
+        EnsureInventoryListHasSlotPlaceholders();
+
+        if (draggedInventoryIndex == targetSlotIndex)
+            return;
+
+        InventoryItem draggedItem = inventoryItems[draggedInventoryIndex];
+        if (draggedItem == null)
+            return;
+
+        keepInventorySorted = false;
+
+        InventoryItem targetItem = inventoryItems[targetSlotIndex];
+        inventoryItems[targetSlotIndex] = draggedItem;
+        inventoryItems[draggedInventoryIndex] = targetItem;
+
+        selectedIndex = targetSlotIndex;
+        SaveManualOrderFromCurrentItems();
+        InstantiateInventory(false);
+        dropHandledThisDrag = true;
+
+        if (dragDropDebugLogs)
+            Debug.Log($"[Inventory] Swapped slots {draggedInventoryIndex} and {targetSlotIndex}");
+    }
+
+    public void DropDraggedItemOnQuickSlot(int quickSlotIndex)
+    {
+        if (quickSlotIndex < 0 || quickSlotIndex >= quickSlots.Length)
+            return;
+
+        if (draggedInventoryIndex < 0 || draggedInventoryIndex >= inventoryItems.Count)
+        {
+            if (dragDropDebugLogs)
+                Debug.Log("[Inventory] Quickslot drop ignored: no active dragged slot index");
+            return;
+        }
+
+        InventoryItem item = inventoryItems[draggedInventoryIndex];
+        if (item == null || item.type != InventoryItemType.Weapon || item.weapon == null)
+        {
+            if (dragDropDebugLogs)
+                Debug.Log("[Inventory] Quickslot drop ignored: dragged item is not a weapon");
+            return;
+        }
+
+        quickSlots[quickSlotIndex] = item.weapon;
+        RefreshQuickSlotVisuals();
+        InstantiateInventory(false);
+        dropHandledThisDrag = true;
+
+        if (dragDropDebugLogs)
+            Debug.Log($"[Inventory] Weapon {item.weapon.weaponName} assigned to quickslot {quickSlotIndex + 1}");
+    }
+
+    private void ValidateDragDropSetup()
+    {
+        if (!dragDropDebugLogs)
+            return;
+
+        if (EventSystem.current == null)
+            Debug.LogWarning("[Inventory] Drag&Drop: Missing EventSystem in scene.");
+
+        if (slotPrefabUI == null)
+            Debug.LogWarning("[Inventory] Drag&Drop: slotPrefabUI is not assigned.");
+
+        int assignedQuickZones = 0;
+        for (int i = 0; i < quickSlotDropZones.Length; i++)
+        {
+            if (quickSlotDropZones[i] != null)
+                assignedQuickZones++;
+        }
+
+        if (assignedQuickZones == 0)
+            Debug.LogWarning("[Inventory] Drag&Drop: quickSlotDropZones are not assigned.");
+        else
+            Debug.Log($"[Inventory] Drag&Drop setup: {assignedQuickZones}/{quickSlotDropZones.Length} quickslot zones assigned.");
+    }
+
     private int GetUsedSlotCount()
     {
         int weaponCount = 0;
@@ -466,14 +967,14 @@ public class Inventory : MonoBehaviour
         }
 
         int ammoTypes = 0;
-        foreach (KeyValuePair<AmmoData, List<int>> entry in ammoStorage)
+        foreach (KeyValuePair<AmmoData, List<AmmoPackage>> entry in ammoStorage)
         {
             if (entry.Key == null)
                 continue;
 
             for (int i = 0; i < entry.Value.Count; i++)
             {
-                if (entry.Value[i] > 0)
+                if (entry.Value[i] != null && entry.Value[i].amount > 0)
                     ammoTypes++;
             }
         }
@@ -533,6 +1034,8 @@ public class Inventory : MonoBehaviour
                 quickSlots[i] = null;
         }
 
+        RefreshQuickSlotVisuals();
+
         RefreshInventoryIfOpen();
     }
 
@@ -541,7 +1044,73 @@ public class Inventory : MonoBehaviour
         if (slotIndex >= 0 && slotIndex < quickSlots.Length && ownedWeapons.Count > 0 && ownedWeapons[0] != null)
         {
             quickSlots[slotIndex] = ownedWeapons[0];
+            RefreshQuickSlotVisuals();
             RefreshInventoryIfOpen();
         }
+    }
+}
+
+public sealed class InventorySlotDropHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IDropHandler
+{
+    private Inventory inventory;
+    private int slotIndex;
+
+    public int SlotIndex => slotIndex;
+
+    public void Configure(Inventory ownerInventory, int index)
+    {
+        inventory = ownerInventory;
+        slotIndex = index;
+    }
+
+    public void OnBeginDrag(PointerEventData eventData)
+    {
+        if (inventory == null)
+            return;
+
+        inventory.BeginDragFromInventorySlot(slotIndex);
+    }
+
+    public void OnDrop(PointerEventData eventData)
+    {
+        if (inventory == null)
+            return;
+
+        inventory.DropDraggedItemOnInventorySlot(slotIndex);
+    }
+
+    public void OnDrag(PointerEventData eventData)
+    {
+    }
+
+    public void OnEndDrag(PointerEventData eventData)
+    {
+        if (inventory == null)
+            return;
+
+        inventory.ResolveDropFromPointer(eventData);
+        inventory.EndDragFromInventorySlot();
+    }
+}
+
+public sealed class InventoryQuickSlotDropHandler : MonoBehaviour, IDropHandler
+{
+    private Inventory inventory;
+    private int quickSlotIndex;
+
+    public int QuickSlotIndex => quickSlotIndex;
+
+    public void Configure(Inventory ownerInventory, int index)
+    {
+        inventory = ownerInventory;
+        quickSlotIndex = index;
+    }
+
+    public void OnDrop(PointerEventData eventData)
+    {
+        if (inventory == null)
+            return;
+
+        inventory.DropDraggedItemOnQuickSlot(quickSlotIndex);
     }
 }

@@ -13,6 +13,6 @@ MonoBehaviour:
   m_Name: PistolAmmo
   m_EditorClassIdentifier: 
   ammoName: Pistol
-  ammoPickupName: 9mm hangun
-  inventoryIcon: {fileID: 21300000, guid: 71074996ed34734449042cd57fedc306, type: 3}
-  maxCarry: 60
+  ammoPickupName: 9mm handgun
+  inventoryIcon: {fileID: 21300000, guid: e97f8afcd6e97ba4e8a61c1b59885bb1, type: 3}
+  maxCarry: 30
