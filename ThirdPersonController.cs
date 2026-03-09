@@ -32,6 +32,7 @@ public class ThirdPersonController : MonoBehaviour
     [Header("Flashlight data")]
     public Transform flashlight;
     public float flashlightFollowSpeed = 15f;
+    public LayerMask flashlightBlockMask = ~0;
 
     // Player States
     bool isSprinting = false;
@@ -235,6 +236,8 @@ public class ThirdPersonController : MonoBehaviour
 
     void TryInteractNearby()
     {
+        nearbyInteractables.RemoveAll(interactable => interactable == null);
+
         if (nearbyInteractables.Count == 0)
             return;
 
@@ -245,6 +248,9 @@ public class ThirdPersonController : MonoBehaviour
         foreach (var interactable in nearbyInteractables)
         {
             MonoBehaviour mb = interactable as MonoBehaviour;
+
+            if (mb == null)
+                continue;
 
             float dist = Vector3.Distance(transform.position, mb.transform.position);
 
@@ -275,10 +281,10 @@ public class ThirdPersonController : MonoBehaviour
     {
         if (flashlight == null) return;
 
-        Ray ray = Camera.main.ViewportPointToRay(new Vector3(0.5f, 0.5f));
+        Ray ray = GetAimRay();
         Vector3 targetPoint;
 
-        if (Physics.Raycast(ray, out RaycastHit hit, 200f))
+        if (Physics.Raycast(ray, out RaycastHit hit, 200f, flashlightBlockMask, QueryTriggerInteraction.Ignore))
             targetPoint = hit.point;
         else
             targetPoint = ray.origin + ray.direction * 200f;
@@ -291,6 +297,13 @@ public class ThirdPersonController : MonoBehaviour
             targetRot,
             flashlightFollowSpeed * Time.deltaTime
         );
+    }
+
+    Ray GetAimRay()
+    {
+        Ray cameraRay = Camera.main.ViewportPointToRay(new Vector3(0.5f, 0.5f));
+        Vector3 rayOrigin = firePoint != null ? firePoint.transform.position : transform.position + Vector3.up * 1.5f;
+        return new Ray(rayOrigin, cameraRay.direction);
     }
 
     public void UnlockCrusor(bool newuiOpen)
@@ -401,7 +414,7 @@ public class ThirdPersonController : MonoBehaviour
         HUD.crosshair.Shoot();
         HUD.SetLoadedAmmoAmount(EquipedWeapon.realMagazineSize);
 
-        Ray ray = Camera.main.ViewportPointToRay(new Vector3(0.5f, 0.5f));
+        Ray ray = GetAimRay();
 
         if (Physics.Raycast(ray, out RaycastHit hit, EquipedWeapon.RayDistance))
         {

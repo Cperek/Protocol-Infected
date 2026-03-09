@@ -5,6 +5,7 @@ public class AmmoPickup : MonoBehaviour, IInteractable
     public AmmoData ammoType;
     public int amount = 6;
     public GameObject floatingUI;
+    private ThirdPersonController nearbyPlayer;
 
     public string GetPrompt()
     {
@@ -19,6 +20,8 @@ public class AmmoPickup : MonoBehaviour, IInteractable
             player.inventory.GetAmmo(player.EquipedWeapon.ammoType)
         );
 
+        player.UnregisterNearby(this);
+
         Destroy(gameObject);
     }
 
@@ -29,6 +32,7 @@ public class AmmoPickup : MonoBehaviour, IInteractable
 
         if (interaction != null)
         {
+            nearbyPlayer = interaction;
             interaction.RegisterNearby(this);
         }
     }
@@ -40,7 +44,16 @@ public class AmmoPickup : MonoBehaviour, IInteractable
 
         if (interaction != null)
         {
+            if (nearbyPlayer == interaction)
+                nearbyPlayer = null;
+
             interaction.UnregisterNearby(this);
         }
+    }
+
+    private void OnDestroy()
+    {
+        if (nearbyPlayer != null)
+            nearbyPlayer.UnregisterNearby(this);
     }
 }

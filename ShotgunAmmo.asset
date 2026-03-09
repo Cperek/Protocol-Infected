@@ -10,9 +10,9 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 83e2a6b4e5ea7c448b7064e8136f8729, type: 3}
-  m_Name: SnipetAmmo
+  m_Name: ShotgunAmmo
   m_EditorClassIdentifier: 
-  ammoName: Sniper
-  ammoPickupName: 44 Magnum
-  inventoryIcon: {fileID: 21300000, guid: 21d9df87c9d6da240b256296b898912b, type: 3}
-  maxCarry: 60
+  ammoName: Shotgun
+  ammoPickupName: shotgun shells
+  inventoryIcon: {fileID: 21300000, guid: 7182bc44962abd243869c99c6ee67d08, type: 3}
+  maxCarry: 15

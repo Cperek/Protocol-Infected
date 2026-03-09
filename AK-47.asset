@@ -18,7 +18,7 @@ MonoBehaviour:
   damage: 30
   defaultMagazineSize: 30
   realMagazineSize: 11
-  ammoType: 2
+  ammoType: {fileID: 11400000, guid: c7811c50bdd6c5c4d879d8de0dc84f68, type: 2}
   fireRate: 0.05
   kickbackAmount: 6
   RayDistance: 10
