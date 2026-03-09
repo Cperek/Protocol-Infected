@@ -549,17 +549,40 @@ public class ThirdPersonController : MonoBehaviour
         HUD.crosshair.Shoot();
         HUD.SetLoadedAmmoAmount(EquipedWeapon.realMagazineSize);
 
-        Ray ray = GetAimRay();
+        Ray cameraRay = Camera.main.ViewportPointToRay(new Vector3(0.5f, 0.5f));
 
-        if (Physics.Raycast(ray, out RaycastHit hit, EquipedWeapon.RayDistance))
+        Vector3 aimPoint = cameraRay.origin + cameraRay.direction * EquipedWeapon.RayDistance;
+        if (TryRaycastIgnoringSelf(cameraRay, EquipedWeapon.RayDistance, ~0, out RaycastHit cameraHit))
         {
             if (firePoint != null)
-                firePoint.transform.LookAt(hit.point);
+            {
+                float muzzleDepthOnCameraRay = Vector3.Dot(firePoint.transform.position - cameraRay.origin, cameraRay.direction);
 
+                if (cameraHit.distance >= muzzleDepthOnCameraRay)
+                    aimPoint = cameraHit.point;
+            }
+            else
+            {
+                aimPoint = cameraHit.point;
+            }
+        }
+
+        Vector3 shotOrigin = firePoint != null ? firePoint.transform.position : cameraRay.origin;
+        Vector3 shotDirection = (aimPoint - shotOrigin).normalized;
+        float shotMaxDistance = EquipedWeapon.RayDistance;
+
+        if (shotDirection.sqrMagnitude < 0.0001f)
+            shotDirection = cameraRay.direction;
+
+        if (firePoint != null)
+            firePoint.transform.LookAt(aimPoint);
+
+        if (TryRaycastIgnoringSelf(new Ray(shotOrigin, shotDirection), shotMaxDistance, ~0, out RaycastHit hit))
+        {
             switch (hit.collider.tag)
             {
                 case "Enemy":
-                    HandleEnemyHit(hit, ray);
+                    HandleEnemyHit(hit, new Ray(shotOrigin, shotDirection));
                     break;
 
                 case "Wall":
@@ -568,12 +591,40 @@ public class ThirdPersonController : MonoBehaviour
                     break;
             }
 
-            Debug.DrawRay(ray.origin, ray.direction * hit.distance, Color.green, 1f);
+            Debug.DrawRay(shotOrigin, shotDirection * hit.distance, Color.green, 1f);
         }
         else
         {
-            Debug.DrawRay(ray.origin, ray.direction * EquipedWeapon.RayDistance, Color.red, 1f);
+            Debug.DrawRay(shotOrigin, shotDirection * shotMaxDistance, Color.red, 1f);
         }
+    }
+
+    bool TryRaycastIgnoringSelf(Ray ray, float maxDistance, int layerMask, out RaycastHit validHit)
+    {
+        RaycastHit[] hits = Physics.RaycastAll(ray, maxDistance, layerMask, QueryTriggerInteraction.Ignore);
+
+        if (hits.Length == 0)
+        {
+            validHit = default;
+            return false;
+        }
+
+        System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+
+        foreach (var hit in hits)
+        {
+            if (hit.collider == null)
+                continue;
+
+            if (hit.collider.transform.IsChildOf(transform))
+                continue;
+
+            validHit = hit;
+            return true;
+        }
+
+        validHit = default;
+        return false;
     }
 
     void HandleEnemyHit(RaycastHit hit, Ray ray)
