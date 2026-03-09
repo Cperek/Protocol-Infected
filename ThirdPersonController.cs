@@ -19,11 +19,12 @@ public class ThirdPersonController : MonoBehaviour
 
     [Header("Gun Effects data")]
     public float fireFlashDuration = 0.4f;
-    public GameObject firePoint;
     public GameObject impactConcretePrefab;
     public GameObject impactBodyPrefab;
     public int maxImpactEffects = 20;
     public AudioSource emptySound;
+    private GameObject firePoint;
+    public Transform weaponModelParent;
 
     [Header("Inventory data")]
     public Inventory inventory;
@@ -50,6 +51,8 @@ public class ThirdPersonController : MonoBehaviour
     private AudioSource fireSound;
     private Light fireLight;
     private ParticleSystem shotEmmision;
+    private Dictionary<WeaponData, GameObject> weaponModelInstances = new Dictionary<WeaponData, GameObject>();
+    private GameObject activeWeaponModel;
 
     private InputSystem inputSystem;
 
@@ -76,14 +79,13 @@ public class ThirdPersonController : MonoBehaviour
         cc = GetComponent<CharacterController>();
         animator = GetComponent<Animator>();
 
-        fireSound = firePoint.GetComponent<AudioSource>();
-        fireLight = firePoint.GetComponent<Light>();
-        shotEmmision = firePoint.GetComponent<ParticleSystem>();
+        CacheFirePointComponents();
 
         camRecoil = Camera.main.GetComponent<CameraRecoil>();
         weaponBob = GetComponentInChildren<WeaponBob>();
 
-        fireLight.enabled = false;
+        if (fireLight != null)
+            fireLight.enabled = false;
 
         EquipWeapon(EquipedWeapon);
     }
@@ -133,7 +135,12 @@ public class ThirdPersonController : MonoBehaviour
         if (inputFire && canShot && EquipedWeapon != null && !uiOpen)
             HandleInputFire();
 
-        flashlight.GetComponent<Light>().enabled = isFlashlight;
+        if (flashlight != null)
+        {
+            Light flashlightLight = flashlight.GetComponent<Light>();
+            if (flashlightLight != null)
+                flashlightLight.enabled = isFlashlight;
+        }
 
         if (cc.isGrounded && animator != null)
         {
@@ -306,6 +313,119 @@ public class ThirdPersonController : MonoBehaviour
         return new Ray(rayOrigin, cameraRay.direction);
     }
 
+    void CacheFirePointComponents()
+    {
+        fireSound = null;
+        fireLight = null;
+        shotEmmision = null;
+
+        if (firePoint == null)
+            return;
+
+        fireSound = firePoint.GetComponent<AudioSource>();
+        fireLight = firePoint.GetComponent<Light>();
+        shotEmmision = firePoint.GetComponent<ParticleSystem>();
+    }
+
+    GameObject GetOrCreateWeaponModel(WeaponData weapon)
+    {
+        if (weapon == null || weapon.modelPrefab == null)
+            return null;
+
+        if (weaponModelInstances.TryGetValue(weapon, out GameObject cachedModel) && cachedModel != null)
+            return cachedModel;
+
+        Transform parent = weaponModelParent != null ? weaponModelParent : transform;
+        GameObject modelInstance = Instantiate(weapon.modelPrefab, parent);
+        modelInstance.SetActive(false);
+        weaponModelInstances[weapon] = modelInstance;
+
+        return modelInstance;
+    }
+
+    void SetActiveWeaponModel(WeaponData weapon)
+    {
+        foreach (var model in weaponModelInstances.Values)
+        {
+            if (model != null)
+                model.SetActive(false);
+        }
+
+        activeWeaponModel = GetOrCreateWeaponModel(weapon);
+
+        if (activeWeaponModel != null)
+            activeWeaponModel.SetActive(true);
+    }
+
+    Transform FindChildRecursive(Transform parent, string childName)
+    {
+        if (parent == null || string.IsNullOrEmpty(childName))
+            return null;
+
+        Queue<Transform> queue = new Queue<Transform>();
+        queue.Enqueue(parent);
+
+        while (queue.Count > 0)
+        {
+            Transform current = queue.Dequeue();
+
+            if (current.name == childName)
+                return current;
+
+            for (int i = 0; i < current.childCount; i++)
+                queue.Enqueue(current.GetChild(i));
+        }
+
+        return null;
+    }
+
+    void ResolveWeaponFirePoint(WeaponData weapon)
+    {
+        firePoint = null;
+
+        if (activeWeaponModel == null)
+        {
+            CacheFirePointComponents();
+            return;
+        }
+
+        string firePointName = string.IsNullOrEmpty(weapon.firePointName) ? "FirePoint" : weapon.firePointName;
+        Transform muzzle = FindChildRecursive(activeWeaponModel.transform, firePointName);
+
+        if (muzzle != null)
+            firePoint = muzzle.gameObject;
+        else
+            Debug.LogWarning($"FirePoint '{firePointName}' not found on weapon model: {weapon.weaponName}");
+
+        CacheFirePointComponents();
+
+        if (fireLight != null)
+            fireLight.enabled = false;
+    }
+
+    void ResolveFlashlight(WeaponData weapon)
+    {
+        flashlight = null;
+
+        if (activeWeaponModel == null)
+            return;
+
+        string flashlightName = string.IsNullOrEmpty(weapon.flashlightName) ? "Flashlight" : weapon.flashlightName;
+        Transform flashlightGM = FindChildRecursive(activeWeaponModel.transform, flashlightName);
+
+        if (flashlightGM != null)
+            flashlight = flashlightGM;
+        else
+            Debug.LogWarning($"Flashlight '{flashlightName}' not found on weapon model: {weapon.weaponName}");
+
+        if (flashlight != null)
+        {
+            Light flashlightLight = flashlight.GetComponent<Light>();
+            if (flashlightLight != null)
+                flashlightLight.enabled = false;
+        }
+    }
+
     public void UnlockCrusor(bool newuiOpen)
     {
         uiOpen = newuiOpen;
@@ -363,8 +483,15 @@ public class ThirdPersonController : MonoBehaviour
 
         EquipedWeapon = weapon;
 
-        fireSound.clip = weapon.fireSound;
-        emptySound.clip = weapon.emptySound;
+        SetActiveWeaponModel(weapon);
+        ResolveWeaponFirePoint(weapon);
+        ResolveFlashlight(weapon);
+
+        if (fireSound != null)
+            fireSound.clip = weapon.fireSound;
+
+        if (emptySound != null)
+            emptySound.clip = weapon.emptySound;
 
         if (weapon.defaultMagazineSize > 0)
         {
@@ -380,6 +507,9 @@ public class ThirdPersonController : MonoBehaviour
 
     IEnumerator FlashGun()
     {
+        if (fireLight == null)
+            yield break;
+
         fireLight.enabled = true;
         yield return new WaitForSecondsRealtime(fireFlashDuration);
         fireLight.enabled = false;
@@ -395,7 +525,9 @@ public class ThirdPersonController : MonoBehaviour
     {
         if (EquipedWeapon.realMagazineSize <= 0)
         {
-            emptySound.Play();
+            if (emptySound != null)
+                emptySound.Play();
+
             return;
         }
 
@@ -403,8 +535,11 @@ public class ThirdPersonController : MonoBehaviour
 
         canShot = false;
 
-        fireSound.Play();
-        shotEmmision.Play();
+        if (fireSound != null)
+            fireSound.Play();
+
+        if (shotEmmision != null)
+            shotEmmision.Play();
 
         StartCoroutine(FlashGun());
         StartCoroutine(ResetShotDuration());
@@ -418,7 +553,8 @@ public class ThirdPersonController : MonoBehaviour
 
         if (Physics.Raycast(ray, out RaycastHit hit, EquipedWeapon.RayDistance))
         {
-            firePoint.transform.LookAt(hit.point);
+            if (firePoint != null)
+                firePoint.transform.LookAt(hit.point);
 
             switch (hit.collider.tag)
             {

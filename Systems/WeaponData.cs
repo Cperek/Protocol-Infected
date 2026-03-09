@@ -19,4 +19,7 @@ public class WeaponData : ScriptableObject
     public AudioClip fireSound;
     public AudioClip emptySound;
     public Sprite SpriteUI;
+    public GameObject modelPrefab;
+    public string firePointName = "FirePoint";
+    public string flashlightName = "Flashlight";
 }
