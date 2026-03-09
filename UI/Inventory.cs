@@ -51,7 +51,6 @@ public class Inventory : MonoBehaviour
     [Header("Inventory Feel")]
     public Color slotNormalColor = Color.white;
     public Color slotSelectedColor = new Color(0.85f, 0.85f, 0.85f, 1f);
-    public KeyCode sortInventoryKey = KeyCode.Tab;
     public bool dragDropDebugLogs;
 
     private Shop shop;
@@ -63,9 +62,14 @@ public class Inventory : MonoBehaviour
     private int draggedInventoryIndex = -1;
     private int nextAmmoPackageId = 1;
     private bool dropHandledThisDrag;
+    private InputSystem inputSystem;
 
     private void Start()
     {
+        inputSystem = InputSystem.Instance;
+        if (inputSystem == null)
+            Debug.LogError("InputSystem instance not found in scene.");
+
         gameManager = GetComponent<GameManager>();
         if (gameManager != null)
             shop = gameManager.GetComponent<Shop>();
@@ -82,7 +86,10 @@ public class Inventory : MonoBehaviour
 
     private void Update()
     {
-        if (Input.GetKeyDown(KeyCode.I))
+        if (inputSystem == null)
+            return;
+
+        if (inputSystem.IsInventoryPressed())
         {
             ToggleInventory();
         }
@@ -117,24 +124,24 @@ public class Inventory : MonoBehaviour
 
     private void HandleInventoryInput()
     {
-        if (Input.GetKeyDown(KeyCode.LeftArrow) || Input.GetKeyDown(KeyCode.A))
+        if (inputSystem.IsInventoryLeftPressed())
             MoveSelection(-1, 0);
 
-        if (Input.GetKeyDown(KeyCode.RightArrow) || Input.GetKeyDown(KeyCode.D))
+        if (inputSystem.IsInventoryRightPressed())
             MoveSelection(1, 0);
 
-        if (Input.GetKeyDown(KeyCode.UpArrow) || Input.GetKeyDown(KeyCode.W))
+        if (inputSystem.IsInventoryUpPressed())
             MoveSelection(0, -1);
 
-        if (Input.GetKeyDown(KeyCode.DownArrow) || Input.GetKeyDown(KeyCode.S))
+        if (inputSystem.IsInventoryDownPressed())
             MoveSelection(0, 1);
 
-        if (Input.GetKeyDown(KeyCode.Alpha1)) AssignSelectedToQuickSlot(0);
-        if (Input.GetKeyDown(KeyCode.Alpha2)) AssignSelectedToQuickSlot(1);
-        if (Input.GetKeyDown(KeyCode.Alpha3)) AssignSelectedToQuickSlot(2);
-        if (Input.GetKeyDown(KeyCode.Alpha4)) AssignSelectedToQuickSlot(3);
+        if (inputSystem.IsQuickSlotPressed(0)) AssignSelectedToQuickSlot(0);
+        if (inputSystem.IsQuickSlotPressed(1)) AssignSelectedToQuickSlot(1);
+        if (inputSystem.IsQuickSlotPressed(2)) AssignSelectedToQuickSlot(2);
+        if (inputSystem.IsQuickSlotPressed(3)) AssignSelectedToQuickSlot(3);
 
-        if (Input.GetKeyDown(sortInventoryKey))
+        if (inputSystem.IsSortInventoryPressed())
             SortAndRefreshInventory();
     }
 

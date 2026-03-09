@@ -16,9 +16,14 @@ public class WeaponBob : MonoBehaviour
     private Vector3 recoilOffset;
     private float inputHorizontal;
     private float inputVertical;
+    private InputSystem inputSystem;
 
     void Start()
     {
+        inputSystem = InputSystem.Instance;
+        if (inputSystem == null)
+            Debug.LogError("InputSystem instance not found in scene.");
+
         if (weaponTransform == null)
             weaponTransform = transform;
 
@@ -27,8 +32,11 @@ public class WeaponBob : MonoBehaviour
 
     void Update()
     {
-        inputHorizontal = Input.GetAxis("Horizontal");
-        inputVertical = Input.GetAxis("Vertical");
+        if (inputSystem == null)
+            return;
+
+        inputHorizontal = inputSystem.GetHorizontalInput();
+        inputVertical = inputSystem.GetVerticalInput();
         // Weapon movement bob (based on time)
         float bobX =  (inputVertical > 0 || inputHorizontal > 0) ? Mathf.Sin(Time.time * bobSpeed) * bobAmount : 0f;
         float bobY =  (inputVertical > 0 || inputHorizontal > 0) ? Mathf.Cos(Time.time * bobSpeed * 2f) * bobAmount * 0.5f : 0f;

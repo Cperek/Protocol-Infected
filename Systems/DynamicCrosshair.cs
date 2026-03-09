@@ -16,10 +16,21 @@ public class DynamicCrosshair : MonoBehaviour
     public float movementSpread = 10f;
 
     float currentSpread;
+    private InputSystem inputSystem;
+
+    private void Start()
+    {
+        inputSystem = InputSystem.Instance;
+        if (inputSystem == null)
+            Debug.LogError("InputSystem instance not found in scene.");
+    }
 
     void Update()
     {
-        bool moving = Input.GetAxis("Horizontal") != 0 || Input.GetAxis("Vertical") != 0;
+        if (inputSystem == null)
+            return;
+
+        bool moving = inputSystem.GetHorizontalInput() != 0 || inputSystem.GetVerticalInput() != 0;
 
         if (moving)
             currentSpread += movementSpread * Time.deltaTime;

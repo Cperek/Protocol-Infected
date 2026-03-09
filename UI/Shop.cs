@@ -23,16 +23,23 @@ public class Shop : MonoBehaviour
     public float sellRate = 2f;
 
     GameManager gameManager;
+    private InputSystem inputSystem;
 
     private void Start()
     {
+        inputSystem = InputSystem.Instance;
+        if (inputSystem == null)
+            Debug.LogError("InputSystem instance not found in scene.");
         gameManager = GetComponent<GameManager>();
         BuyWindow();
     }
 
     private void Update()
     {
-        if (Input.GetKeyDown(KeyCode.B))
+        if (inputSystem == null)
+            return;
+
+        if (inputSystem.IsBuyMenuPressed())
         {
             playerInventory.InventoryUI.SetActive(false);
             if (ShopUI.activeSelf == true)
@@ -141,7 +148,7 @@ public class Shop : MonoBehaviour
 
     public void UpgradeWeapon(WeaponData weapon, GameObject itemBox)
     {
-        //TODO:: implementacja wyœwietlania listy dostêpnych ulepszeñ a nastêpnie ich obs³uga
+        //TODO:: implementacja wyï¿½wietlania listy dostï¿½pnych ulepszeï¿½ a nastï¿½pnie ich obsï¿½uga
     }
 
     public void SellWeapon(WeaponData weapon, GameObject itemBox)

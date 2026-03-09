@@ -50,6 +50,8 @@ public class ThirdPersonController : MonoBehaviour
     private Light fireLight;
     private ParticleSystem shotEmmision;
 
+    private InputSystem inputSystem;
+
     // Inputs
     float inputHorizontal;
     float inputVertical;
@@ -66,6 +68,10 @@ public class ThirdPersonController : MonoBehaviour
 
     void Start()
     {
+        inputSystem = InputSystem.Instance;
+        if (inputSystem == null)
+            Debug.LogError("InputSystem instance not found in scene.");
+
         cc = GetComponent<CharacterController>();
         animator = GetComponent<Animator>();
 
@@ -83,13 +89,16 @@ public class ThirdPersonController : MonoBehaviour
 
     void Update()
     {
-        if (Input.GetKeyDown(KeyCode.Escape))
+        if (inputSystem == null)
+            return;
+
+        if (inputSystem.IsPausePressed())
             UnlockCrusor(!uiOpen);
 
         // Quick weapon slots
         for (int i = 0; i < inventory.quickSlots.Length; i++)
         {
-            if (Input.GetKeyDown((KeyCode)((int)KeyCode.Alpha1 + i)))
+            if (inputSystem.IsQuickSlotPressed(i))
                 EquipWeapon(inventory.quickSlots[i]);
         }
 
@@ -140,7 +149,7 @@ public class ThirdPersonController : MonoBehaviour
 
         CheckLookPrompt();
 
-        if (Input.GetKeyDown(KeyCode.E))
+        if (inputSystem.IsInteractPressed())
         {
             TryInteractNearby();
         }
@@ -293,15 +302,15 @@ public class ThirdPersonController : MonoBehaviour
 
     void AssignInputs()
     {
-        inputHorizontal = Input.GetAxis("Horizontal");
-        inputVertical = Input.GetAxis("Vertical");
-        inputSprint = Input.GetAxis("Fire3") == 1f;
-        inputEnterAim = Input.GetMouseButtonDown(1);
-        inputExitAim = Input.GetMouseButtonUp(1);
-        inputFire = Input.GetMouseButtonDown(0);
-        inputReload = Input.GetKeyDown(KeyCode.R);
-        inputCrouch = Input.GetKeyDown(KeyCode.LeftControl);
-        InputFlashlight = Input.GetKeyDown(KeyCode.F);
+        inputHorizontal = inputSystem.GetHorizontalInput();
+        inputVertical = inputSystem.GetVerticalInput();
+        inputSprint = inputSystem.IsSprintHeld();
+        inputEnterAim = inputSystem.IsAimPressed();
+        inputExitAim = inputSystem.IsAimReleased();
+        inputFire = inputSystem.IsFirePressed();
+        inputReload = inputSystem.IsReloadPressed();
+        inputCrouch = inputSystem.IsCrouchPressed();
+        InputFlashlight = inputSystem.IsFlashlightPressed();
     }
 
     void CameraRecoilAndBob()
