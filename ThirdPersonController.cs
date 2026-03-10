@@ -233,7 +233,9 @@ public class ThirdPersonController : MonoBehaviour
             if (interactable != null)
             {
                 lookedAtInteractable = interactable;
-                HUD.ShowPrompt(interactable.GetPrompt());
+                string prompt = interactable.GetPrompt();
+                if(!string.IsNullOrEmpty(prompt))
+                    HUD.ShowPrompt(prompt);
                 return;
             }
         }

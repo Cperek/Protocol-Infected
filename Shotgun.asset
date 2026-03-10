@@ -21,7 +21,7 @@ MonoBehaviour:
   ammoType: {fileID: 11400000, guid: 74190f879c5f3074c8e51c87a1afadf9, type: 2}
   fireRate: 0.5
   kickbackAmount: 50
-  RayDistance: 4
+  RayDistance: 2.5
   fireSound: {fileID: 8300000, guid: 9d6114c47e6553040baa7bb993a74145, type: 3}
   emptySound: {fileID: 8300000, guid: 2e4e756cf93b4d845b396956468cec72, type: 3}
   SpriteUI: {fileID: 21300000, guid: eaaee68ddca5f4a43b7565b1baa17b6a, type: 3}

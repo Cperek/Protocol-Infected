@@ -5,10 +5,16 @@ public class AmmoPickup : MonoBehaviour, IInteractable
     public AmmoData ammoType;
     public int amount = 6;
     public GameObject floatingUI;
+    public bool ShowPrompt = false;
     private ThirdPersonController nearbyPlayer;
+
+    private GameObject uiInstance = null;
 
     public string GetPrompt()
     {
+        if (!ShowPrompt)
+            return null;
+
         return "Press E to pick up " + ammoType.ammoPickupName;
     }
 
@@ -27,11 +33,21 @@ public class AmmoPickup : MonoBehaviour, IInteractable
 
     private void OnTriggerEnter(Collider other)
     {
-        floatingUI.SetActive(true);
         ThirdPersonController interaction = other.GetComponent<ThirdPersonController>();
 
         if (interaction != null)
         {
+            if (uiInstance == null && floatingUI != null)
+            {
+                uiInstance = GameObject.Instantiate(
+                    floatingUI,
+                    transform.position,
+                    Quaternion.identity,
+                    transform
+                );
+                uiInstance.SetActive(true);
+            }
+
             nearbyPlayer = interaction;
             interaction.RegisterNearby(this);
         }
@@ -39,7 +55,12 @@ public class AmmoPickup : MonoBehaviour, IInteractable
 
     private void OnTriggerExit(Collider other)
     {
-        floatingUI.SetActive(false);
+        if (uiInstance != null)
+        {
+            Destroy(uiInstance);
+            uiInstance = null;
+        }
+
         ThirdPersonController interaction = other.GetComponent<ThirdPersonController>();
 
         if (interaction != null)
@@ -53,6 +74,12 @@ public class AmmoPickup : MonoBehaviour, IInteractable
 
     private void OnDestroy()
     {
+        if (uiInstance != null)
+        {
+            Destroy(uiInstance);
+            uiInstance = null;
+        }
+
         if (nearbyPlayer != null)
             nearbyPlayer.UnregisterNearby(this);
     }
