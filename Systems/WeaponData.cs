@@ -24,6 +24,9 @@ public class WeaponData : ScriptableObject
 
     [Header("Character Animation")]
     public string fireTriggerName = "";
+    public string reloadTriggerName = "reload";
+    public AnimationClip reloadAnimationClip;
+    public float reloadAnimationDuration = 0f;
 
     public float RayDistance;
     public AudioClip fireSound;

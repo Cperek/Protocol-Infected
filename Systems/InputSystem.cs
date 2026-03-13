@@ -78,6 +78,7 @@ public class InputSystem : MonoBehaviour
     public float GetHorizontalInput() => Input.GetAxis(HorizontalAxis);
     public float GetVerticalInput() => Input.GetAxis(VerticalAxis);
     public bool IsSprintHeld() => Input.GetKey(SprintKey);
+    public bool IsAimHeld() => Input.GetMouseButton(AimMouseButton);
     public bool IsAimPressed() => Input.GetMouseButtonDown(AimMouseButton);
     public bool IsAimReleased() => Input.GetMouseButtonUp(AimMouseButton);
     public bool IsFirePressed() => Input.GetMouseButtonDown(FireMouseButton);

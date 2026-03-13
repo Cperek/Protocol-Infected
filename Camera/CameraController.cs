@@ -27,9 +27,12 @@ public class CameraController : MonoBehaviour
 
     public float offsetZ = 0f;
     public float offsetX = 0f;
+    public float crouchOffsetY = -0.6f;
+    public float crouchTransitionSpeed = 8f;
     float mouseX;
     float mouseY;
-    float offsetDistanceY;
+    public float offsetDistanceY;
+    float targetOffsetY;
 
     Transform player;
 
@@ -38,6 +41,7 @@ public class CameraController : MonoBehaviour
 
         player = GameObject.FindWithTag("Player").transform;
         offsetDistanceY = transform.position.y;
+        targetOffsetY = offsetDistanceY;
 
         // Lock and hide cursor with option isn't checked
         if ( ! clickToMoveCamera )
@@ -51,6 +55,9 @@ public class CameraController : MonoBehaviour
 
     void Update()
     {
+
+        // Smoothly move offsetDistanceY toward target
+        offsetDistanceY = Mathf.Lerp(offsetDistanceY, targetOffsetY, crouchTransitionSpeed * Time.deltaTime);
 
         // Follow player - camera offset
         transform.position = player.position + new Vector3(offsetX, offsetDistanceY, offsetZ);
@@ -75,5 +82,10 @@ public class CameraController : MonoBehaviour
 
         transform.rotation = Quaternion.Euler(-mouseY, mouseX, 0);
 
+    }
+
+    public void SetCrouch(bool crouching, float baseOffsetY)
+    {
+        targetOffsetY = crouching ? baseOffsetY + crouchOffsetY : baseOffsetY;
     }
 }

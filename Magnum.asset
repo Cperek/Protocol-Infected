@@ -17,7 +17,7 @@ MonoBehaviour:
   type: 0
   damage: 50
   defaultMagazineSize: 6
-  realMagazineSize: 0
+  realMagazineSize: 6
   ammoType: {fileID: 11400000, guid: d33d56e57a98b6e41a844ed2a531fcab, type: 2}
   fireRate: 0.5
   kickbackAmount: 25
@@ -27,10 +27,13 @@ MonoBehaviour:
   modelKickSnappiness: 18
   modelKickReturnSpeed: 6
   fireTriggerName: 
+  reloadTriggerName: reload
+  reloadAnimationClip: {fileID: -203655887218126122, guid: 9afcff97cbf57c742b587198771a0eaf, type: 3}
+  reloadAnimationDuration: 4.7
   RayDistance: 10
   fireSound: {fileID: 8300000, guid: 9d6114c47e6553040baa7bb993a74145, type: 3}
   emptySound: {fileID: 8300000, guid: 2e4e756cf93b4d845b396956468cec72, type: 3}
-  SpriteUI: {fileID: 21300000, guid: 3ca12b9d3b8c35d4f9acc0e76a8aa7fd, type: 3}
+  SpriteUI: {fileID: 21300000, guid: e20ba02fc47d571499c97841d39d6b3a, type: 3}
   modelPrefab: {fileID: 8148697837361561920, guid: e0b122a3c37679c46bdf9d1029c5a3f2, type: 3}
   firePointName: FirePoint
   flashlightName: Flashlight

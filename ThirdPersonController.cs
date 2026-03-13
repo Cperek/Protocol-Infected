@@ -35,6 +35,9 @@ public class ThirdPersonController : MonoBehaviour
     public float flashlightFollowSpeed = 15f;
     public LayerMask flashlightBlockMask = ~0;
 
+    [Header("Weapon handling")]
+    public float weaponChangeReaimDelay = 0.2f;
+
     // Player States
     bool isSprinting = false;
     bool isCrouching = false;
@@ -45,6 +48,8 @@ public class ThirdPersonController : MonoBehaviour
 
     // Components
     private CameraRecoil camRecoil;
+    private CameraController cameraController;
+    private float baseCameraOffsetY;
     private WeaponBob weaponBob;
     private WeaponModelKickback weaponModelKickback;
     private Animator animator;
@@ -69,7 +74,10 @@ public class ThirdPersonController : MonoBehaviour
     bool InputFlashlight;
 
     bool canShot = true;
+    bool canAim = true;
     bool uiOpen = false;
+    bool isReloading = false;
+    Coroutine restoreAimCoroutine;
 
     void Start()
     {
@@ -83,6 +91,9 @@ public class ThirdPersonController : MonoBehaviour
         CacheFirePointComponents();
 
         camRecoil = Camera.main.GetComponent<CameraRecoil>();
+        cameraController = FindObjectOfType<CameraController>();
+        if (cameraController != null)
+            baseCameraOffsetY = cameraController.offsetDistanceY;
         weaponBob = GetComponentInChildren<WeaponBob>();
 
         if (fireLight != null)
@@ -112,7 +123,11 @@ public class ThirdPersonController : MonoBehaviour
             return;
 
         if (inputCrouch)
+        {
             isCrouching = !isCrouching;
+            if (cameraController != null)
+                cameraController.SetCrouch(isCrouching, baseCameraOffsetY);
+        }
 
         if (InputFlashlight)
             isFlashlight = !isFlashlight;
@@ -120,7 +135,7 @@ public class ThirdPersonController : MonoBehaviour
         if (inputReload)
             Reload();
 
-        if (inputEnterAim)
+        if (inputEnterAim && canAim)
         {
             isAiming = true;
             HUD.CallCrosshair();
@@ -133,7 +148,7 @@ public class ThirdPersonController : MonoBehaviour
             HUD.ForgetAmmoDisplay();
         }
 
-        if (inputFire && canShot && EquipedWeapon != null && !uiOpen)
+        if (inputFire && canShot && EquipedWeapon != null && !uiOpen && !isReloading)
             HandleInputFire();
 
         if (flashlight != null)
@@ -145,9 +160,9 @@ public class ThirdPersonController : MonoBehaviour
 
         if (cc.isGrounded && animator != null)
         {
-            animator.SetBool("crouch", isCrouching);
+            animator.SetBool("is_crouch", isCrouching);
             animator.SetFloat("speed", cc.velocity.magnitude);
-            animator.SetBool("aim", isAiming);
+            animator.SetBool("aim", isAiming || isCrouching == true);
 
             if (HUD.crosshairUI != null)
             {
@@ -486,9 +501,73 @@ public class ThirdPersonController : MonoBehaviour
             animator.SetTrigger(EquipedWeapon.fireTriggerName);
     }
 
+    AnimationClip GetReloadAnimationClip()
+    {
+        if (EquipedWeapon != null && EquipedWeapon.reloadAnimationClip != null)
+            return EquipedWeapon.reloadAnimationClip;
+
+        if (animator == null || animator.runtimeAnimatorController == null)
+            return null;
+
+        foreach (AnimationClip clip in animator.runtimeAnimatorController.animationClips)
+        {
+            if (clip != null && clip.name.ToLower().Contains("reload"))
+                return clip;
+        }
+
+        return null;
+    }
+
+    float GetReloadDuration(AnimationClip reloadClip)
+    {
+        if (EquipedWeapon != null && EquipedWeapon.reloadAnimationDuration > 0f)
+            return EquipedWeapon.reloadAnimationDuration;
+
+        if (reloadClip != null)
+            return reloadClip.length;
+
+        return 0.5f;
+    }
+
+    IEnumerator ReloadRoutine(int ammoToLoad)
+    {
+        isReloading = true;
+
+        AnimationClip reloadClip = GetReloadAnimationClip();
+        float reloadDuration = GetReloadDuration(reloadClip);
+
+        if (animator != null)
+        {
+            float speedMultiplier = 1f;
+            if (reloadClip != null && reloadDuration > 0f)
+                speedMultiplier = reloadClip.length / reloadDuration;
+
+            animator.SetFloat("ReloadSpeed", speedMultiplier);
+
+            string reloadTriggerName = EquipedWeapon != null && !string.IsNullOrEmpty(EquipedWeapon.reloadTriggerName)
+                ? EquipedWeapon.reloadTriggerName
+                : "reload";
+
+            animator.SetTrigger(reloadTriggerName);
+        }
+
+        yield return new WaitForSeconds(reloadDuration);
+
+        if (animator != null)
+            animator.SetFloat("ReloadSpeed", 1f);
+
+        EquipedWeapon.realMagazineSize += ammoToLoad;
+        inventory.UseAmmo(EquipedWeapon.ammoType, ammoToLoad);
+
+        HUD.SetLoadedAmmoAmount(EquipedWeapon.realMagazineSize);
+        HUD.SetHoldAmmoAmount(inventory.GetAmmo(EquipedWeapon.ammoType));
+
+        isReloading = false;
+    }
+
     void Reload()
     {
-        if (EquipedWeapon == null) return;
+        if (EquipedWeapon == null || isReloading) return;
 
         int neededAmmo = EquipedWeapon.defaultMagazineSize - EquipedWeapon.realMagazineSize;
 
@@ -497,17 +576,32 @@ public class ThirdPersonController : MonoBehaviour
         int availableAmmo = inventory.GetAmmo(EquipedWeapon.ammoType);
         int ammoToLoad = Mathf.Min(neededAmmo, availableAmmo);
 
-        EquipedWeapon.realMagazineSize += ammoToLoad;
+        if (ammoToLoad <= 0) return;
 
-        inventory.UseAmmo(EquipedWeapon.ammoType, ammoToLoad);
+        StartCoroutine(ReloadRoutine(ammoToLoad));
+    }
 
-        HUD.SetLoadedAmmoAmount(EquipedWeapon.realMagazineSize);
-        HUD.SetHoldAmmoAmount(inventory.GetAmmo(EquipedWeapon.ammoType));
+    IEnumerator RestoreAimAfterWeaponChange()
+    {
+        canAim = false;
+        yield return new WaitForSeconds(weaponChangeReaimDelay);
+        canAim = true;
+
+        if (inputSystem != null && inputSystem.IsAimHeld())
+        {
+            isAiming = true;
+            HUD.CallCrosshair();
+            HUD.CallAmmoDisplay();
+        }
     }
 
     void EquipWeapon(WeaponData weapon)
     {
         if (weapon == null) return;
+        isAiming = false;
+        canAim = false;
+
+        HUD.ForgetAmmoDisplay();
 
         EquipedWeapon = weapon;
 
@@ -521,6 +615,17 @@ public class ThirdPersonController : MonoBehaviour
         if (emptySound != null)
             emptySound.clip = weapon.emptySound;
 
+        if(animator != null)
+        {
+            if(weapon.weaponName == "Shotgun"){
+                animator.SetBool("is_shotgun", true);
+                animator.SetBool("is_pistol", false);
+            }
+            else{
+                animator.SetBool("is_pistol", true);
+                animator.SetBool("is_shotgun", false);
+            }
+        }
         if (weapon.defaultMagazineSize > 0)
         {
             HUD.lockAmmoDisplay = false;
@@ -531,6 +636,11 @@ public class ThirdPersonController : MonoBehaviour
         {
             HUD.lockAmmoDisplay = true;
         }
+
+        if (restoreAimCoroutine != null)
+            StopCoroutine(restoreAimCoroutine);
+
+        restoreAimCoroutine = StartCoroutine(RestoreAimAfterWeaponChange());
     }
 
     IEnumerator FlashGun()
