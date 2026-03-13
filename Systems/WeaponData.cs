@@ -15,6 +15,16 @@ public class WeaponData : ScriptableObject
     public AmmoData ammoType;
     public float fireRate;
     public float kickbackAmount;
+    [Header("Model Kickback")]
+    public float modelKickbackZ = 0.06f;
+    public float modelKickRotationX = 5f;
+    public float modelKickRotationY = 1.5f;
+    public float modelKickSnappiness = 18f;
+    public float modelKickReturnSpeed = 10f;
+
+    [Header("Character Animation")]
+    public string fireTriggerName = "";
+
     public float RayDistance;
     public AudioClip fireSound;
     public AudioClip emptySound;

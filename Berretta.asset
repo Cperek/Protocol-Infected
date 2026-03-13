@@ -17,13 +17,20 @@ MonoBehaviour:
   type: 0
   damage: 15
   defaultMagazineSize: 15
-  realMagazineSize: 11
+  realMagazineSize: 8
   ammoType: {fileID: 11400000, guid: fa2a0b36f3d7195439b6727d9e5ce342, type: 2}
   fireRate: 0.2
   kickbackAmount: 10
+  modelKickbackZ: 0.0007
+  modelKickRotationX: 20
+  modelKickRotationY: 10
+  modelKickSnappiness: 18
+  modelKickReturnSpeed: 10
+  fireTriggerName: 
   RayDistance: 10
   fireSound: {fileID: 8300000, guid: 0ad4d8e44303b39488103b67e96357fc, type: 3}
   emptySound: {fileID: 8300000, guid: 2e4e756cf93b4d845b396956468cec72, type: 3}
   SpriteUI: {fileID: 21300000, guid: 5e1e6f3917bdcaa4fa08ba47788fb895, type: 3}
   modelPrefab: {fileID: 5311531154002972536, guid: d05a449701f6e6a49844a1ec5c47bfa7, type: 3}
   firePointName: FirePoint
+  flashlightName: Flashlight

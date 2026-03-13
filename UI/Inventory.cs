@@ -342,7 +342,7 @@ public class Inventory : MonoBehaviour
                     itemDecor.text = quickSlotLabel;
                     bool hasLabel = !string.IsNullOrEmpty(quickSlotLabel);
                     itemDecor.gameObject.SetActive(hasLabel);
-                    itemDecorBg.gameObject.SetActive(hasLabel);
+                    itemDecorBg.gameObject.SetActive(true);
                 }
                 else if (item.type == InventoryItemType.Ammo && item.ammo != null)
                 {
@@ -519,7 +519,7 @@ public class Inventory : MonoBehaviour
         if (labels.Count == 0)
             return "";
 
-        return "SLOT " + string.Join("/", labels);
+        return "#" + string.Join("/", labels);
     }
 
     private InventoryItem GetSelectedItem()

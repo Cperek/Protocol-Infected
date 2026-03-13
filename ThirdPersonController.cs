@@ -46,6 +46,7 @@ public class ThirdPersonController : MonoBehaviour
     // Components
     private CameraRecoil camRecoil;
     private WeaponBob weaponBob;
+    private WeaponModelKickback weaponModelKickback;
     private Animator animator;
     private CharacterController cc;
     private AudioSource fireSound;
@@ -356,7 +357,20 @@ public class ThirdPersonController : MonoBehaviour
         activeWeaponModel = GetOrCreateWeaponModel(weapon);
 
         if (activeWeaponModel != null)
+        {
             activeWeaponModel.SetActive(true);
+
+            weaponModelKickback = activeWeaponModel.GetComponent<WeaponModelKickback>();
+            if (weaponModelKickback == null)
+                weaponModelKickback = activeWeaponModel.AddComponent<WeaponModelKickback>();
+
+            weaponModelKickback.Configure(weapon);
+            weaponModelKickback.ResetPoseImmediate();
+        }
+        else
+        {
+            weaponModelKickback = null;
+        }
     }
 
     Transform FindChildRecursive(Transform parent, string childName)
@@ -456,8 +470,20 @@ public class ThirdPersonController : MonoBehaviour
             camRecoil.ApplyKickback(EquipedWeapon.kickbackAmount);
         }
 
+        if (weaponModelKickback != null)
+            weaponModelKickback.PlayKick();
+
         if (weaponBob != null && isAiming)
             weaponBob.ApplyRecoil();
+    }
+
+    void PlayCharacterFireAnimation()
+    {
+        if (animator == null || EquipedWeapon == null)
+            return;
+
+        if (!string.IsNullOrEmpty(EquipedWeapon.fireTriggerName))
+            animator.SetTrigger(EquipedWeapon.fireTriggerName);
     }
 
     void Reload()
@@ -547,6 +573,7 @@ public class ThirdPersonController : MonoBehaviour
         StartCoroutine(ResetShotDuration());
 
         CameraRecoilAndBob();
+        PlayCharacterFireAnimation();
 
         HUD.crosshair.Shoot();
         HUD.SetLoadedAmmoAmount(EquipedWeapon.realMagazineSize);
