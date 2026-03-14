@@ -33,15 +33,22 @@ public class CameraController : MonoBehaviour
     float mouseY;
     public float offsetDistanceY;
     float targetOffsetY;
+    float baseOffsetY;
 
     Transform player;
+
+    void Awake()
+    {
+        // Capture the intended standing camera height before other scripts query it.
+        baseOffsetY = transform.position.y;
+        offsetDistanceY = baseOffsetY;
+        targetOffsetY = baseOffsetY;
+    }
 
     void Start()
     {
 
         player = GameObject.FindWithTag("Player").transform;
-        offsetDistanceY = transform.position.y;
-        targetOffsetY = offsetDistanceY;
 
         // Lock and hide cursor with option isn't checked
         if ( ! clickToMoveCamera )
@@ -87,5 +94,10 @@ public class CameraController : MonoBehaviour
     public void SetCrouch(bool crouching, float baseOffsetY)
     {
         targetOffsetY = crouching ? baseOffsetY + crouchOffsetY : baseOffsetY;
+    }
+
+    public float GetBaseOffsetY()
+    {
+        return baseOffsetY;
     }
 }

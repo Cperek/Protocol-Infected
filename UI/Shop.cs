@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -23,6 +24,7 @@ public class Shop : MonoBehaviour
     public float sellRate = 2f;
 
     GameManager gameManager;
+    private bool shopUIPrewarmed;
     private InputSystem inputSystem;
 
     private void Start()
@@ -32,6 +34,24 @@ public class Shop : MonoBehaviour
             Debug.LogError("InputSystem instance not found in scene.");
         gameManager = GetComponent<GameManager>();
         BuyWindow();
+        StartCoroutine(PrewarmShopUI());
+    }
+
+    private IEnumerator PrewarmShopUI()
+    {
+        if (shopUIPrewarmed || ShopUI == null)
+            yield break;
+
+        bool wasActive = ShopUI.activeSelf;
+        ShopUI.SetActive(true);
+        Canvas.ForceUpdateCanvases();
+
+        yield return null;
+
+        if (!wasActive)
+            ShopUI.SetActive(false);
+
+        shopUIPrewarmed = true;
     }
 
     private void Update()
@@ -63,7 +83,6 @@ public class Shop : MonoBehaviour
 
     private void ClearShopWindow()
     {
-        Debug.Log("clear");
         ShopItemsList.transform.DestroyAllChildren();
 
     }

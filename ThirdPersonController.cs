@@ -38,6 +38,9 @@ public class ThirdPersonController : MonoBehaviour
     [Header("Weapon handling")]
     public float weaponChangeReaimDelay = 0.2f;
 
+    [Header("Footsteps")]
+    public FootstepSoundSystem footstepSoundSystem;
+
     // Player States
     bool isSprinting = false;
     bool isCrouching = false;
@@ -59,6 +62,7 @@ public class ThirdPersonController : MonoBehaviour
     private ParticleSystem shotEmmision;
     private Dictionary<WeaponData, GameObject> weaponModelInstances = new Dictionary<WeaponData, GameObject>();
     private GameObject activeWeaponModel;
+    private readonly RaycastHit[] raycastHitBuffer = new RaycastHit[16];
 
     private InputSystem inputSystem;
 
@@ -93,11 +97,15 @@ public class ThirdPersonController : MonoBehaviour
         camRecoil = Camera.main.GetComponent<CameraRecoil>();
         cameraController = FindObjectOfType<CameraController>();
         if (cameraController != null)
-            baseCameraOffsetY = cameraController.offsetDistanceY;
+            baseCameraOffsetY = cameraController.GetBaseOffsetY();
         weaponBob = GetComponentInChildren<WeaponBob>();
+        if (footstepSoundSystem == null)
+            footstepSoundSystem = GetComponentInChildren<FootstepSoundSystem>();
 
         if (fireLight != null)
             fireLight.enabled = false;
+
+        PrewarmCombatAssets();
 
         EquipWeapon(EquipedWeapon);
     }
@@ -197,6 +205,8 @@ public class ThirdPersonController : MonoBehaviour
         if (inputDirection.magnitude > 1f)
             inputDirection.Normalize(); // prevent faster diagonal movement
 
+        isSprinting = inputSprint && !isCrouching && !isAiming && inputDirection.sqrMagnitude > 0.01f;
+
         // Transform input relative to camera
         Vector3 forward = Camera.main.transform.forward;
         Vector3 right = Camera.main.transform.right;
@@ -233,6 +243,9 @@ public class ThirdPersonController : MonoBehaviour
         }
 
         cc.Move(moveDirection);
+
+        if (footstepSoundSystem != null)
+            footstepSoundSystem.Tick(cc.isGrounded, inputDirection.magnitude, isSprinting, isCrouching, Time.fixedDeltaTime);
     }
 
 
@@ -343,6 +356,47 @@ public class ThirdPersonController : MonoBehaviour
         fireSound = firePoint.GetComponent<AudioSource>();
         fireLight = firePoint.GetComponent<Light>();
         shotEmmision = firePoint.GetComponent<ParticleSystem>();
+    }
+
+    void PreloadAudioClip(AudioClip clip)
+    {
+        if (clip != null && clip.loadState == AudioDataLoadState.Unloaded)
+            clip.LoadAudioData();
+    }
+
+    void PrewarmImpactPrefab(GameObject prefab)
+    {
+        if (prefab == null)
+            return;
+
+        GameObject prewarm = Instantiate(prefab, new Vector3(0f, -9999f, 0f), Quaternion.identity);
+        if (prewarm != null)
+            Destroy(prewarm);
+    }
+
+    void PrewarmCombatAssets()
+    {
+        if (EquipedWeapon != null)
+        {
+            PreloadAudioClip(EquipedWeapon.fireSound);
+            PreloadAudioClip(EquipedWeapon.emptySound);
+        }
+
+        if (inventory != null && inventory.ownedWeapons != null)
+        {
+            for (int i = 0; i < inventory.ownedWeapons.Count; i++)
+            {
+                WeaponData weapon = inventory.ownedWeapons[i];
+                if (weapon == null)
+                    continue;
+
+                PreloadAudioClip(weapon.fireSound);
+                PreloadAudioClip(weapon.emptySound);
+            }
+        }
+
+        PrewarmImpactPrefab(impactConcretePrefab);
+        PrewarmImpactPrefab(impactBodyPrefab);
     }
 
     GameObject GetOrCreateWeaponModel(WeaponData weapon)
@@ -609,6 +663,9 @@ public class ThirdPersonController : MonoBehaviour
         ResolveWeaponFirePoint(weapon);
         ResolveFlashlight(weapon);
 
+        PreloadAudioClip(weapon.fireSound);
+        PreloadAudioClip(weapon.emptySound);
+
         if (fireSound != null)
             fireSound.clip = weapon.fireSound;
 
@@ -740,25 +797,37 @@ public class ThirdPersonController : MonoBehaviour
 
     bool TryRaycastIgnoringSelf(Ray ray, float maxDistance, int layerMask, out RaycastHit validHit)
     {
-        RaycastHit[] hits = Physics.RaycastAll(ray, maxDistance, layerMask, QueryTriggerInteraction.Ignore);
+        int hitCount = Physics.RaycastNonAlloc(ray, raycastHitBuffer, maxDistance, layerMask, QueryTriggerInteraction.Ignore);
 
-        if (hits.Length == 0)
+        if (hitCount <= 0)
         {
             validHit = default;
             return false;
         }
 
-        System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+        float closestDistance = float.PositiveInfinity;
+        int bestIndex = -1;
 
-        foreach (var hit in hits)
+        for (int i = 0; i < hitCount; i++)
         {
+            RaycastHit hit = raycastHitBuffer[i];
+
             if (hit.collider == null)
                 continue;
 
             if (hit.collider.transform.IsChildOf(transform))
                 continue;
 
-            validHit = hit;
+            if (hit.distance < closestDistance)
+            {
+                closestDistance = hit.distance;
+                bestIndex = i;
+            }
+        }
+
+        if (bestIndex >= 0)
+        {
+            validHit = raycastHitBuffer[bestIndex];
             return true;
         }
 

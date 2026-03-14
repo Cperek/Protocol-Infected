@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -62,6 +63,7 @@ public class Inventory : MonoBehaviour
     private int draggedInventoryIndex = -1;
     private int nextAmmoPackageId = 1;
     private bool dropHandledThisDrag;
+    private bool inventoryUIPrewarmed;
     private InputSystem inputSystem;
 
     private void Start()
@@ -82,6 +84,28 @@ public class Inventory : MonoBehaviour
         ValidateDragDropSetup();
         ConfigureQuickSlotDropZones();
         RefreshQuickSlotVisuals();
+        StartCoroutine(PrewarmInventoryUI());
+    }
+
+    private IEnumerator PrewarmInventoryUI()
+    {
+        if (inventoryUIPrewarmed || InventoryUI == null)
+            yield break;
+
+        bool wasActive = InventoryUI.activeSelf;
+        InventoryUI.SetActive(true);
+
+        BuildInventoryItems();
+        EnsureSelectedIndexInBounds();
+        InstantiateInventory();
+        Canvas.ForceUpdateCanvases();
+
+        yield return null;
+
+        if (!wasActive)
+            InventoryUI.SetActive(false);
+
+        inventoryUIPrewarmed = true;
     }
 
     private void Update()
