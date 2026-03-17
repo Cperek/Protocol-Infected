@@ -50,7 +50,9 @@ public class FootstepSoundSystem : MonoBehaviour
             return;
 
         PlayStep(isSprinting, isCrouching);
-        stepTimer = GetStepInterval(isSprinting, isCrouching) / Mathf.Max(moveAmount, 0.4f);
+        // Keep cadence stable when movement starts and moveAmount is still ramping up.
+        float speedFactor = Mathf.Lerp(0.8f, 1f, Mathf.InverseLerp(minMoveAmount, 1f, moveAmount));
+        stepTimer = GetStepInterval(isSprinting, isCrouching) / speedFactor;
     }
 
     private float GetStepInterval(bool isSprinting, bool isCrouching)

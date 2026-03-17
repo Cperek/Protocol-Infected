@@ -29,6 +29,8 @@ public class WeaponData : ScriptableObject
     public float reloadAnimationDuration = 0f;
 
     public float RayDistance;
+    [Range(0f, 1f)] public float reloadVolume = 1f;
+    public AudioClip reloadSound;
     public AudioClip fireSound;
     public AudioClip emptySound;
     public Sprite SpriteUI;

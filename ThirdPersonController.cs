@@ -34,12 +34,16 @@ public class ThirdPersonController : MonoBehaviour
     public Transform flashlight;
     public float flashlightFollowSpeed = 15f;
     public LayerMask flashlightBlockMask = ~0;
+    public AudioSource flashlightAudioSource;
 
     [Header("Weapon handling")]
     public float weaponChangeReaimDelay = 0.2f;
 
-    [Header("Footsteps")]
-    public FootstepSoundSystem footstepSoundSystem;
+    [Header("Sounds")]
+    private FootstepSoundSystem footstepSoundSystem;
+    public AudioSource pickupAudioSource;
+    public AudioClip pickupAudioClip;
+    [Range(0f, 1f)] public float pickupVolume = 0.2f;
 
     // Player States
     bool isSprinting = false;
@@ -138,7 +142,14 @@ public class ThirdPersonController : MonoBehaviour
         }
 
         if (InputFlashlight)
+        {
             isFlashlight = !isFlashlight;
+            if (flashlightAudioSource != null){
+                flashlightAudioSource.PlayOneShot(flashlightAudioSource.clip);
+    
+            }
+        }
+            
 
         if (inputReload)
             Reload();
@@ -162,8 +173,9 @@ public class ThirdPersonController : MonoBehaviour
         if (flashlight != null)
         {
             Light flashlightLight = flashlight.GetComponent<Light>();
-            if (flashlightLight != null)
+            if (flashlightLight != null){
                 flashlightLight.enabled = isFlashlight;
+            }
         }
 
         if (cc.isGrounded && animator != null)
@@ -299,6 +311,8 @@ public class ThirdPersonController : MonoBehaviour
             }
         }
 
+
+        pickupAudioSource.PlayOneShot(pickupAudioClip, pickupVolume);
         closest.Interact(GetComponent<ThirdPersonController>());
     }
 
@@ -378,6 +392,7 @@ public class ThirdPersonController : MonoBehaviour
     {
         if (EquipedWeapon != null)
         {
+            PreloadAudioClip(EquipedWeapon.reloadSound);
             PreloadAudioClip(EquipedWeapon.fireSound);
             PreloadAudioClip(EquipedWeapon.emptySound);
         }
@@ -390,6 +405,7 @@ public class ThirdPersonController : MonoBehaviour
                 if (weapon == null)
                     continue;
 
+                PreloadAudioClip(weapon.reloadSound);
                 PreloadAudioClip(weapon.fireSound);
                 PreloadAudioClip(weapon.emptySound);
             }
@@ -589,6 +605,7 @@ public class ThirdPersonController : MonoBehaviour
 
         AnimationClip reloadClip = GetReloadAnimationClip();
         float reloadDuration = GetReloadDuration(reloadClip);
+        float oldVolume = emptySound.volume;
 
         if (animator != null)
         {
@@ -605,6 +622,12 @@ public class ThirdPersonController : MonoBehaviour
             animator.SetTrigger(reloadTriggerName);
         }
 
+        if (EquipedWeapon != null && EquipedWeapon.reloadSound != null && emptySound != null)
+        {
+            emptySound.volume = EquipedWeapon.reloadVolume;
+            emptySound.PlayOneShot(EquipedWeapon.reloadSound,1f);
+        }
+
         yield return new WaitForSeconds(reloadDuration);
 
         if (animator != null)
@@ -617,6 +640,9 @@ public class ThirdPersonController : MonoBehaviour
         HUD.SetHoldAmmoAmount(inventory.GetAmmo(EquipedWeapon.ammoType));
 
         isReloading = false;
+
+        yield return new WaitForSeconds(EquipedWeapon.reloadSound.length);
+        emptySound.volume = oldVolume;
     }
 
     void Reload()
@@ -663,6 +689,7 @@ public class ThirdPersonController : MonoBehaviour
         ResolveWeaponFirePoint(weapon);
         ResolveFlashlight(weapon);
 
+        PreloadAudioClip(weapon.reloadSound);
         PreloadAudioClip(weapon.fireSound);
         PreloadAudioClip(weapon.emptySound);
 

@@ -104,7 +104,7 @@ public class Shop : MonoBehaviour
             itemPrice.text = availableWeapons[index].price.ToString() + "$";
             itemImage.sprite = availableWeapons[index].SpriteUI;
             newItem.GetComponent<Button>().onClick.AddListener(() => {
-                BuyWeapon(availableWeapons[index], newItem);
+                BuyWeapon(availableWeapons[index], newItem, index);
             });
         }
     }
@@ -155,11 +155,12 @@ public class Shop : MonoBehaviour
         }
     }
 
-    public void BuyWeapon(WeaponData weapon, GameObject itemBox)
+    public void BuyWeapon(WeaponData weapon, GameObject itemBox, int index)
     {
         if (playerInventory.money >= weapon.price && playerInventory.AddWeapon(weapon))
         {
             playerInventory.money -= weapon.price;
+            availableWeapons.RemoveAt(index);
             Destroy(itemBox);
         }
 
@@ -176,6 +177,8 @@ public class Shop : MonoBehaviour
         {
             playerInventory.RemoveWeapon(weapon);
             playerInventory.money +=  (int) (weapon.price / sellRate);
+            weapon.price = (int)(weapon.price / 2);
+            availableWeapons.Add(weapon);
             Destroy(itemBox);
         }
     }

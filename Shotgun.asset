@@ -17,7 +17,7 @@ MonoBehaviour:
   type: 0
   damage: 50
   defaultMagazineSize: 7
-  realMagazineSize: 6
+  realMagazineSize: 3
   ammoType: {fileID: 11400000, guid: 74190f879c5f3074c8e51c87a1afadf9, type: 2}
   fireRate: 0.5
   kickbackAmount: 50
@@ -31,6 +31,8 @@ MonoBehaviour:
   reloadAnimationClip: {fileID: -203655887218126122, guid: 9afcff97cbf57c742b587198771a0eaf, type: 3}
   reloadAnimationDuration: 6.5
   RayDistance: 2.5
+  reloadVolume: 0.08
+  reloadSound: {fileID: 8300000, guid: 141bd1b2111829444a23d75aeb6cb34b, type: 3}
   fireSound: {fileID: 8300000, guid: 9d6114c47e6553040baa7bb993a74145, type: 3}
   emptySound: {fileID: 8300000, guid: 2e4e756cf93b4d845b396956468cec72, type: 3}
   SpriteUI: {fileID: 21300000, guid: ca77408fbfaaa6b429064f59db12c35f, type: 3}
