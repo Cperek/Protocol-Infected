@@ -9,6 +9,7 @@ public class ThirdPersonController : MonoBehaviour
     public float sprintAdittion = 3.5f;
     public float gravity = 9.8f;
     public float mouseSensitivity = 3.0f;
+    public float health = 100f;
 
     [Header("UI data")]
     public HUD HUD;
